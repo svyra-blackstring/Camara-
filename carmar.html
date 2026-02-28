@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Live Camera Filters</title>
+    <style>
+        /* Base Reset */
+        *, *::before, *::after {
+            box-sizing: border-box;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #000;
+            color: #fff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        /* Video Container */
+        #video-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            background: #000;
+        }
+
+        #video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: filter 0.3s ease;
+        }
+
+        /* Flash Effect */
+        #flash {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #fff;
+            opacity: 0;
+            z-index: 5;
+            pointer-events: none;
+            transition: opacity 0.1s ease-out;
+        }
+
+        /* UI Layer */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            pointer-events: none; /* Let touches pass through where there are no controls */
+        }
+
+        /* Glassmorphism Top Bar */
+        #top-bar {
+            pointer-events: auto;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+            padding: 20px 0 40px 0;
+            text-align: center;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 1.1rem;
+            font-weight: 500;
+            letter-spacing: 1px;
+            text-shadow: 0 1px 3px rgba(0,0,0,0.8);
+            color: #f0f0f0;
+        }
+
+        /* Bottom Controls Area */
+        #bottom-area {
+            pointer-events: auto;
+            background: linear-gradient(to top, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
+            padding-bottom: max(30px, env(safe-area-inset-bottom));
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        /* Filter Ribbon */
+        #filter-ribbon {
+            display: flex;
+            overflow-x: auto;
+            gap: 12px;
+            padding: 10px 20px;
+            scroll-behavior: smooth;
+            /* Hide Scrollbar */
+            -ms-overflow-style: none; 
+            scrollbar-width: none; 
+        }
+
+        #filter-ribbon::-webkit-scrollbar {
+            display: none;
+        }
+
+        .filter-btn {
+            flex: 0 0 auto;
+            padding: 8px 16px;
+            border-radius: 20px;
+            background: rgba(30, 30, 30, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #ccc;
+            font-size: 0.85rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .filter-btn:hover {
+            color: #fff;
+            background: rgba(60, 60, 60, 0.8);
+        }
+
+        .filter-btn.active {
+            background: #fff;
+            color: #000;
+            border-color: #fff;
+            transform: scale(1.05);
+            font-weight: 600;
+        }
+
+        /* Camera Controls Row */
+        #camera-controls {
+            display: flex;
+            justify-content: space-evenly;
+            align-items: center;
+            padding: 0 20px;
+            width: 100%;
+        }
+
+        /* Secondary Buttons (Switch / Reset) */
+        .sec-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.15);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: none;
+            color: #fff;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.2s;
+            outline: none;
+        }
+
+        .sec-btn:active {
+            background: rgba(255, 255, 255, 0.3);
+            transform: scale(0.95);
+        }
+
+        /* Main Shutter Button */
+        .shutter-wrapper {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: 4px solid #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            background: transparent;
+            padding: 0;
+            outline: none;
+        }
+
+        .shutter-inner {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: #fff;
+            transition: all 0.15s ease;
+        }
+
+        .shutter-wrapper:active .shutter-inner {
+            width: 56px;
+            height: 56px;
+            background: #e0e0e0;
+        }
+
+        @media (max-width: 380px) {
+            .shutter-wrapper { width: 70px; height: 70px; border-width: 3px; }
+            .shutter-inner { width: 56px; height: 56px; }
+            .shutter-wrapper:active .shutter-inner { width: 50px; height: 50px; }
+            .sec-btn { width: 44px; height: 44px; font-size: 1rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="video-container">
+        <video id="video" autoplay playsinline></video>
+    </div>
+
+    <div id="flash"></div>
+
+    <div id="ui-layer">
+        
+        <div id="top-bar">
+            <h1 class="title">Live Camera Filters</h1>
+        </div>
+
+        <div id="bottom-area">
+            
+            <div id="filter-ribbon">
+                </div>
+
+            <div id="camera-controls">
+                <button class="sec-btn" id="btn-reset" aria-label="Reset Filters">
+                    ✖
+                </button>
+
+                <button class="shutter-wrapper" id="btn-photo" aria-label="Take Photo">
+                    <div class="shutter-inner"></div>
+                </button>
+
+                <button class="sec-btn" id="btn-switch" aria-label="Switch Camera">
+                    🔄
+                </button>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // DOM Elements
+        const video = document.getElementById('video');
+        const filterRibbon = document.getElementById('filter-ribbon');
+        const btnSwitch = document.getElementById('btn-switch');
+        const btnPhoto = document.getElementById('btn-photo');
+        const btnReset = document.getElementById('btn-reset');
+        const flashOverlay = document.getElementById('flash');
+
+        // State
+        let currentStream = null;
+        let facingMode = 'environment'; // Start with rear camera if available, typical for normal camera
+        let currentFilter = 'none';
+
+        // Filters Definition
+        const filters = [
+            { name: "Normal", value: "none" },
+            
+            // Basic Filters
+            { name: "B & W", value: "grayscale(100%)" },
+            { name: "Sepia", value: "sepia(100%)" },
+            { name: "Vintage", value: "sepia(50%) hue-rotate(-30deg) saturate(140%) contrast(90%)" },
+            { name: "Bright", value: "brightness(150%)" },
+            { name: "Dark", value: "brightness(50%)" },
+            { name: "Soft", value: "blur(1px) brightness(110%) contrast(90%)" },
+            { name: "Warm", value: "sepia(30%) saturate(150%)" },
+            { name: "Cool", value: "hue-rotate(180deg) saturate(120%)" },
+            { name: "Contrast", value: "contrast(200%)" },
+            { name: "Blur", value: "blur(4px)" },
+            { name: "Sharp", value: "contrast(150%) saturate(120%)" },
+            
+            // Nostalgia Filters
+            { name: "Nostalgia 1", value: "sepia(40%) contrast(110%) brightness(110%) hue-rotate(-10deg)" },
+            { name: "Nostalgia 2", value: "sepia(60%) contrast(120%) brightness(105%) hue-rotate(-20deg)" },
+            { name: "Nostalgia 3", value: "sepia(80%) contrast(130%) brightness(100%) hue-rotate(-30deg)" },
+            { name: "Old Memory", value: "grayscale(50%) sepia(50%) contrast(90%) brightness(110%)" },
+            { name: "Retro Film", value: "sepia(30%) saturate(120%) contrast(120%) hue-rotate(-15deg)" },
+            
+            // Love Story Filters
+            { name: "Love Story", value: "sepia(20%) saturate(130%) hue-rotate(-10deg) brightness(110%)" },
+            { name: "Pink Love", value: "sepia(30%) saturate(150%) hue-rotate(-30deg) brightness(115%)" },
+            { name: "Romantic", value: "sepia(10%) saturate(120%) blur(0.5px) brightness(110%)" },
+            { name: "Rose Tone", value: "sepia(40%) saturate(140%) hue-rotate(-20deg) contrast(105%)" },
+            { name: "Heart Warm", value: "sepia(25%) saturate(160%) hue-rotate(-5deg) brightness(105%)" },
+            
+            // Dream Filters
+            { name: "Dream 1", value: "blur(1px) brightness(120%) saturate(80%) contrast(85%)" },
+            { name: "Dream 2", value: "blur(2px) brightness(130%) saturate(90%) contrast(80%)" },
+            { name: "Dream Glow", value: "blur(1.5px) brightness(140%) saturate(110%) contrast(90%)" },
+            { name: "Soft Dream", value: "blur(0.8px) brightness(115%) saturate(85%) contrast(95%)" },
+            { name: "Fantasy", value: "blur(1px) brightness(125%) saturate(130%) hue-rotate(20deg)" },
+            
+            // Creative Filters
+            { name: "Neon", value: "saturate(300%) hue-rotate(90deg) contrast(150%)" },
+            { name: "Cyber", value: "saturate(250%) hue-rotate(180deg) contrast(140%) brightness(110%)" },
+            { name: "Matrix", value: "sepia(100%) hue-rotate(80deg) saturate(200%) contrast(150%)" },
+            { name: "Sunset", value: "sepia(50%) hue-rotate(-30deg) saturate(200%) brightness(110%)" },
+            { name: "Sunrise", value: "sepia(30%) hue-rotate(-15deg) saturate(150%) brightness(120%)" },
+            { name: "Golden", value: "sepia(60%) saturate(180%) hue-rotate(-10deg) contrast(110%)" },
+            { name: "Purple Night", value: "saturate(200%) hue-rotate(250deg) contrast(120%) brightness(90%)" },
+            { name: "Blue Ocean", value: "saturate(150%) hue-rotate(150deg) contrast(110%) brightness(105%)" },
+            { name: "Fire", value: "saturate(250%) hue-rotate(-40deg) contrast(130%) brightness(110%)" },
+            { name: "Ice", value: "saturate(120%) hue-rotate(180deg) contrast(120%) brightness(120%)" }
+        ];
+
+        // Programmatically add variations to reach > 100 filters
+        for(let i=1; i<=20; i++) {
+            filters.push({ name: `Cinematic ${i}`, value: `contrast(${100 + i*5}%) saturate(${100 + i*2}%) sepia(${i}%)` });
+        }
+        for(let i=1; i<=15; i++) {
+            filters.push({ name: `Mono ${i}`, value: `grayscale(100%) brightness(${80 + i*3}%) contrast(${100 + i*4}%)` });
+        }
+        for(let i=1; i<=15; i++) {
+            filters.push({ name: `CyberPunk ${i}`, value: `saturate(${150 + i*10}%) hue-rotate(${i*18}deg) contrast(${110 + i*3}%)` });
+        }
+        for(let i=1; i<=20; i++) {
+            filters.push({ name: `Vintage ${i+1}`, value: `sepia(${30 + i*3}%) hue-rotate(-${i*2}deg) contrast(${90 + i}%) brightness(${95 + i}%)` });
+        }
+
+        // Render Filter Buttons
+        function renderFilters() {
+            filters.forEach((filterObj, index) => {
+                const btn = document.createElement('button');
+                btn.className = `filter-btn ${index === 0 ? 'active' : ''}`;
+                btn.innerText = filterObj.name;
+                btn.onclick = () => applyFilter(filterObj.value, btn);
+                filterRibbon.appendChild(btn);
+            });
+        }
+
+        // Initialize Camera
+        async function initCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                },
+                audio: false
+            };
+
+            try {
+                currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                video.srcObject = currentStream;
+                
+                // Mirror front camera naturally
+                if (facingMode === 'user') {
+                    video.style.transform = 'scaleX(-1)';
+                } else {
+                    video.style.transform = 'scaleX(1)';
+                }
+            } catch (err) {
+                console.error("Camera access error:", err);
+                // Fallback to 'user' if 'environment' fails on devices without rear camera
+                if(facingMode === 'environment') {
+                    facingMode = 'user';
+                    initCamera();
+                } else {
+                    alert("Cannot access camera. Please allow camera permissions in your browser.");
+                }
+            }
+        }
+
+        // Apply CSS Filter
+        function applyFilter(filterValue, buttonElement) {
+            currentFilter = filterValue;
+            video.style.filter = currentFilter;
+
+            document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+            if(buttonElement) {
+                buttonElement.classList.add('active');
+                
+                // Smooth scroll to center the selected filter in the ribbon
+                const ribbonRect = filterRibbon.getBoundingClientRect();
+                const btnRect = buttonElement.getBoundingClientRect();
+                const scrollLeft = buttonElement.offsetLeft - (ribbonRect.width / 2) + (btnRect.width / 2);
+                
+                filterRibbon.scrollTo({
+                    left: scrollLeft,
+                    behavior: 'smooth'
+                });
+            }
+        }
+
+        // Trigger Shutter Flash Effect
+        function triggerFlash() {
+            flashOverlay.style.opacity = '1';
+            setTimeout(() => {
+                flashOverlay.style.opacity = '0';
+            }, 100);
+        }
+
+        // Event Listeners
+
+        // Switch Camera
+        btnSwitch.addEventListener('click', () => {
+            facingMode = (facingMode === 'user') ? 'environment' : 'user';
+            initCamera();
+        });
+
+        // Reset Filter
+        btnReset.addEventListener('click', () => {
+            const normalBtn = filterRibbon.firstChild;
+            applyFilter('none', normalBtn);
+        });
+
+        // Take Photo
+        btnPhoto.addEventListener('click', () => {
+            triggerFlash();
+
+            // Slight delay to allow flash effect to trigger visually before processing
+            setTimeout(() => {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+
+                // Apply the CSS filter logic to the canvas draw state
+                ctx.filter = currentFilter;
+
+                // Handle mirroring for captured photo if front camera is used
+                if (facingMode === 'user') {
+                    ctx.translate(canvas.width, 0);
+                    ctx.scale(-1, 1);
+                }
+
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+                // Export & Download
+                const dataUrl = canvas.toDataURL('image/png');
+                const link = document.createElement('a');
+                link.download = `Photo_${new Date().toISOString().slice(0,10).replace(/-/g,'')}_${Date.now()}.png`;
+                link.href = dataUrl;
+                link.click();
+            }, 50);
+        });
+
+        // Bootstrap App
+        window.addEventListener('DOMContentLoaded', () => {
+            renderFilters();
+            initCamera();
+        });
+
+    </script>
+</body>
+</html>
